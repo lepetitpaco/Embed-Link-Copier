@@ -24,3 +24,10 @@ Aucune.
 1. Vérifier que le zip porte le bon numéro et que tout est poussé, avec accord.
 2. Firefox : envoi sur AMO après confirmation du fichier et de la version.
 3. **Réservé à la personne : Chrome Web Store**, Claude n'y a pas accès. Lui donner le zip et les étapes.
+
+## Pièges des stores
+
+- Chrome n'accepte qu'une version en attente : « Importer » reste grisé tant qu'un examen tourne. Pour envoyer une nouvelle version, annuler d'abord l'examen en cours.
+- Chrome rejette les listes de domaines ou de mots clés dans la fiche et le résumé du manifest (rejet de la 1.2.2).
+- AMO : fiche pilotable depuis le navigateur (slug `x-instagram-link-converter`). Checklist et textes de chaque version en tête de `store/CHROME.md` et `store/FIREFOX.md`.
+- 1.2.3 : dernière version packagée (fiche et résumé sans liste de domaines).
