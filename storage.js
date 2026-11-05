@@ -231,13 +231,32 @@ async function getStats() {
   }
 }
 
+// storage.sync peut exister sans marcher (Electron, ex. homedash : « "sync" is not available ») :
+// au premier échec, tout passe par le stockage local. `var` : partagé entre les content scripts.
+var syncUnavailable = false;
+
 /**
  * Obtient le stockage synchronisé avec le compte du navigateur (repli sur le stockage local)
  */
 function getSyncStorageAPI() {
   const api = typeof chrome !== 'undefined' && chrome.storage ? chrome.storage : (typeof browser !== 'undefined' ? browser.storage : null);
   if (!api) return null;
-  return api.sync ? { area: 'sync', storage: api.sync } : { area: 'local', storage: api.local };
+  return api.sync && !syncUnavailable ? { area: 'sync', storage: api.sync } : { area: 'local', storage: api.local };
+}
+
+/**
+ * Lance une opération sur le stockage choisi ; si storage.sync échoue, la refait sur le stockage local
+ */
+async function withServicesStorage(operation) {
+  const sync = getSyncStorageAPI();
+  if (!sync) return operation(null);
+  try {
+    return await operation(sync.storage);
+  } catch (error) {
+    if (sync.area !== 'sync') throw error;
+    syncUnavailable = true;
+    return operation(getSyncStorageAPI().storage);
+  }
 }
 
 function getLastError() {
@@ -248,19 +267,27 @@ function getLastError() {
 
 function storageGet(storage, keys) {
   return new Promise((resolve, reject) => {
-    storage.get(keys, (items) => {
-      const error = getLastError();
-      error ? reject(new Error(error.message)) : resolve(items || {});
-    });
+    try {
+      storage.get(keys, (items) => {
+        const error = getLastError();
+        error ? reject(new Error(error.message)) : resolve(items || {});
+      });
+    } catch (error) {
+      reject(error);
+    }
   });
 }
 
 function storageSet(storage, items) {
   return new Promise((resolve, reject) => {
-    storage.set(items, () => {
-      const error = getLastError();
-      error ? reject(new Error(error.message)) : resolve();
-    });
+    try {
+      storage.set(items, () => {
+        const error = getLastError();
+        error ? reject(new Error(error.message)) : resolve();
+      });
+    } catch (error) {
+      reject(error);
+    }
   });
 }
 
@@ -343,21 +370,22 @@ async function migrateLegacySettings() {
  * Au premier appel, la liste est créée depuis les défauts et l'ancien réglage, puis sauvegardée
  */
 async function getServices() {
-  const sync = getSyncStorageAPI();
-  if (!sync) return migrateLegacySettings();
+  if (!getSyncStorageAPI()) return migrateLegacySettings();
 
   try {
-    const saved = (await storageGet(sync.storage, [STORAGE_KEYS.SERVICES]))[STORAGE_KEYS.SERVICES];
-    if (!saved) {
-      const services = await migrateLegacySettings();
-      await storageSet(sync.storage, { [STORAGE_KEYS.SERVICES]: services });
+    return await withServicesStorage(async (storage) => {
+      const saved = (await storageGet(storage, [STORAGE_KEYS.SERVICES]))[STORAGE_KEYS.SERVICES];
+      if (!saved) {
+        const services = await migrateLegacySettings();
+        await storageSet(storage, { [STORAGE_KEYS.SERVICES]: services });
+        return services;
+      }
+      const services = {};
+      for (const platform of CONFIG.PLATFORMS) {
+        services[platform] = sanitizeServices(saved[platform]) || getDefaultServices(platform);
+      }
       return services;
-    }
-    const services = {};
-    for (const platform of CONFIG.PLATFORMS) {
-      services[platform] = sanitizeServices(saved[platform]) || getDefaultServices(platform);
-    }
-    return services;
+    });
   } catch (error) {
     console.error('Error getting services:', error);
     return migrateLegacySettings();
@@ -368,9 +396,8 @@ async function getServices() {
  * Sauvegarde les services de toutes les plateformes (les onglets ouverts sont prévenus par storage.onChanged)
  */
 async function saveServices(services) {
-  const sync = getSyncStorageAPI();
-  if (!sync) return;
-  await storageSet(sync.storage, { [STORAGE_KEYS.SERVICES]: services });
+  if (!getSyncStorageAPI()) return;
+  await withServicesStorage((storage) => storageSet(storage, { [STORAGE_KEYS.SERVICES]: services }));
 }
 
 /**
@@ -387,9 +414,9 @@ async function resetServices(platform) {
  * Lit les services d'une plateforme dans un changement de storage.onChanged, ou null s'ils n'ont pas changé
  */
 function getChangedServices(changes, area, platform) {
-  const sync = getSyncStorageAPI();
   const change = changes[STORAGE_KEYS.SERVICES];
-  if (!sync || area !== sync.area || !change) return null;
+  // sync ou local selon le navigateur : la clé n'existe que dans l'un des deux
+  if ((area !== 'sync' && area !== 'local') || !change) return null;
   return sanitizeServices(change.newValue?.[platform]) || getDefaultServices(platform);
 }
 
