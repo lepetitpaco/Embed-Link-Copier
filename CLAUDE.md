@@ -93,3 +93,22 @@ Pas de build step — c'est du JavaScript vanilla.
 - Les zips de `packages/` sont suivis par git : les régénérer avec `scripts/package-*` avant chaque publication
 - Ne pas mélanger les APIs V2/V3 dans le même fichier background (deux fichiers séparés)
 - `manifest.json` est le fichier actif modifié par les scripts — ne pas l'éditer manuellement
+
+## Pièges
+
+- **Fins de ligne CRLF** : tous les `.js`, `popup.html`, `README.md`, `CHANGELOG.md`, `CONTRIBUTING.md` et les `.bat` sont en CRLF. Toute réécriture doit les conserver (vérifier avec `file`). `CLAUDE.md` et `RELEASE.md` sont en LF.
+- **Scripts non exécutables** : lancer `bash scripts/prepare-*.sh` puis `bash scripts/package-*.sh`. `prepare-*` laisse des `manifest-*.json.backup`, ignorés par git.
+- **Firefox** : les content scripts d'une même page partagent leur portée. Ne jamais déclarer deux fois le même `const`/`let` de premier niveau entre `config.js`, `utils.js`, `storage.js` et un `content-*.js` (d'où `observer`, `pageObserver`, `tiktokObserver`). Valider avec `npx web-ext lint`, lancé dans Docker (pas de Node sur la machine de dev).
+- **Extension non empaquetée** : après un changement, la recharger dans `chrome://extensions` (bouton ↻), puis recharger l'onglet. Un agent qui pilote Chrome ne peut pas ouvrir `chrome://` : le demander à Paco.
+- **Ancien nom** : le dépôt s'appelait `X-Instagram-Link-Converter` (renommé le 2026-10-25). GitHub redirige l'ancien dépôt, pas GitHub Pages. Le slug AMO reste `x-instagram-link-converter` : ne pas le « corriger » dans les liens.
+- **Chrome et les mots clés** : la 1.2.2 a été rejetée (« spam dans les mots clés ») à cause de la liste des domaines et dépôts d'embed dans la description. Ne jamais lister de domaines dans le résumé du manifest ni dans la fiche Chrome : les crédits renvoient vers le site.
+- **Services d'embed** : testés le 2026-10-25, résultats dans le tableau de `site/index.html` (section `#services`). Morts ce jour-là : ddinstagram, vxinstagram, instagram7, vxtiktok, tfxktok ; instagramez redirige vers de la pub. kkinstagram et kktiktok viennent de kkScript. Revérifier avant d'en ajouter un par défaut.
+
+## Captures
+
+- Posts publics de la NASA uniquement. Comparaison Discord prise dans un salon de test privé, thème Discord neutralisé en retirant la classe `custom-theme-background` dans l'onglet avant la capture.
+- 5 captures maximum, partout (limite de Chrome), au format 1280x800.
+
+## Commits
+
+Messages en français, format `type: …`. Jamais de ligne `Co-Authored-By` ni de mention d'un assistant IA dans les commits, PR ou tags.
